@@ -5,44 +5,37 @@ import torch
 import numpy as np
 import argparse
 from tqdm import tqdm  # optional progress bar
-from preprocess import ModelDataset, load_dataset
-from transformers import GPT2Tokenizer, GPT2LMHeadModel
+from preprocess import load_dataset
+from transformers import GPT2Tokenizer
+from model import GPT24QUAC
 
 # TODO: Set hyperparameters
 hyperparams = {
-    "num_epochs": None,
-    "batch_size": None,
-    "lr": None
+    "num_epochs": 10,
+    "batch_size": 100,
+    "lr": 0.001
 }
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def train(model, train_loader, loss_fn, optimizer, experiment, hyperparams):
-    """
-    Training loop that trains BERT model.
-
-    Inputs:
-    - model: A BERT model
-    - train_loader: Dataloader of training data
-    - experiment: comet.ml experiment object
-    - hyperparams: Hyperparameters dictionary
-    """
+def train(model, train_loader, optimizer, experiment, hyperparams):
     model.train()
     with experiment.train():
-        # TODO: Write training loop
-        pass
+        epoch = hyperparams['num_epochs']
+        for i in range(epoch):
+            for batch in tqdm(train_loader):
+                inputs = batch['inputs'].to(device)
+                start_pos = batch['start_pos'].to(device)
+                end_pos = batch['end_pos'].to(device)
+                token_type = batch['token_type'].to(device)
+                loss = model(inputs, token_type_ids=token_type, start_pos=start_pos, end_pos=end_pos)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                experiment.log_metric("loss", loss.cpu().detach().numpy())
 
 
-def test(model, test_loader, loss_fn, word2vec, experiment, hyperparams):
-    """
-    Testing loop for BERT model and logs perplexity and accuracy to comet.ml.
-
-    Inputs:
-    - model: A BERT model
-    - train_loader: Dataloader of training data
-    - experiment: comet.ml experiment object
-    - hyperparams: Hyperparameters dictionary
-    """
+def test(model, test_loader, experiment, hyperparams):
     model.eval()
     with experiment.test(), torch.no_grad():
         # TODO: Write testing loop
@@ -68,8 +61,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # TODO: Make sure you modify the `.comet.config` file
-    # experiment = Experiment(log_code=False)
-    # experiment.log_parameters(hyperparams)
+    experiment = Experiment(log_code=False)
+    experiment.log_parameters(hyperparams)
 
     tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     tokenizer.add_special_tokens({"sep_token": "<SEP>",
@@ -79,12 +72,15 @@ if __name__ == "__main__":
 
     train_loader, test_loader = load_dataset([args.train_file, args.test_file], tokenizer, batch_size=hyperparams["batch_size"])
 
-    # if args.load:
-    #     model.load_state_dict(torch.load('./model.pt'))
-    # if args.train:
-    #     train(model, train_loader, loss_fn, optimizer, word2vec, experiment,
-    #           hyperparams)
-    # if args.test:
-    #     test(model, test_loader, loss_fn, word2vec, experiment, hyperparams)
-    # if args.save:
-    #     torch.save(model.state_dict(), './model.pt')
+    model = GPT24QUAC()
+
+    optimizer = optim.Adam(model.parameters(), lr=hyperparams['lr'])
+
+    if args.load:
+        model.load_state_dict(torch.load('./model.pt'))
+    if args.train:
+        train(model, train_loader, optimizer, experiment, hyperparams)
+    if args.test:
+        test(model, test_loader, experiment, hyperparams)
+    if args.save:
+        torch.save(model.state_dict(), './model.pt')
