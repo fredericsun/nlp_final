@@ -31,20 +31,20 @@ class ModelDataset(Dataset):
                     self.q2con.append(len(self.context))
                 self.context.append(data['context'])
         self.inputs = pad_sequence(self.inputs, batch_first=True, padding_value=0)
+        self.token_type = pad_sequence(self.token_type, batch_first=True, padding_value=-1)
 
     def __len__(self):
 
         return len(self.inputs)
 
     def __getitem__(self, idx):
-        context = self.context[self.q2con[idx]]
 
         item = {
             "inputs": self.inputs[idx],
             "start_pos": self.start_pos[idx],
             "end_pos": self.end_pos[idx],
             "token_type": self.token_type[idx],
-            "context": context
+            "q2con": self.q2con[idx]
         }
         return item
 
@@ -56,4 +56,4 @@ def load_dataset(fn, tokenizer, batch_size):
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
 
-    return train_loader, test_loader
+    return train_loader, test_loader, test_data.context

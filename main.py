@@ -36,7 +36,7 @@ def train(model, train_loader, optimizer, experiment, hyperparams):
                 experiment.log_metric("loss", loss.cpu().detach().numpy())
 
 
-def test(model, test_loader, experiment, hyperparams):
+def test(model, test_loader, test_context, experiment, hyperparams):
     model.eval()
     with experiment.test(), torch.no_grad():
         f1_sum = 0
@@ -45,7 +45,8 @@ def test(model, test_loader, experiment, hyperparams):
             inputs = batch['inputs'].to(device)
             start_pos = batch['start_pos'].to(device)
             end_pos = batch['end_pos'].to(device)
-            context = batch['context'].to(device)
+            q2con = batch['q2con'].to(device)
+            context = [test_context[q2con[i]] for i in q2con]
             start_logits, end_logits = model(inputs)
             pred_start = np.argmax(start_logits.cpu().detach().numpy(), axis=1)
             pred_end = np.argmax(end_logits.cpu().detach().numpy(), axis=1)
@@ -81,20 +82,21 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # TODO: Make sure you modify the `.comet.config` file
-    # experiment = Experiment(log_code=False)
-    # experiment.log_parameters(hyperparams)
+    experiment = Experiment(log_code=False)
+    experiment.log_parameters(hyperparams)
 
     tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+
     tokenizer.add_special_tokens({"sep_token": "<SEP>",
                                   "bos_token": "<BOS>",
                                   "eos_token": "<EOS>",
                                   "pad_token": "<PAD>"})
     tokenizer.add_tokens("CANNOTANSWER")
 
-    train_loader, test_loader = load_dataset([args.train_file, args.test_file], tokenizer, batch_size=hyperparams["batch_size"])
+    train_loader, test_loader, test_context = load_dataset([args.train_file, args.test_file], tokenizer, batch_size=hyperparams["batch_size"])
 
     model = GPT24QUAC()
-    model.resize_token_embeddings(len(tokenizer))
+    model.resize_token_embeddings(len(tokenizer) + 1)
 
     optimizer = optim.Adam(model.parameters(), lr=hyperparams['lr'])
 
@@ -103,6 +105,6 @@ if __name__ == "__main__":
     if args.train:
         train(model, train_loader, optimizer, experiment, hyperparams)
     if args.test:
-        test(model, test_loader, experiment, hyperparams)
+        test(model, test_loader, test_context, experiment, hyperparams)
     if args.save:
         torch.save(model.state_dict(), './model.pt')
