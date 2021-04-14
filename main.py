@@ -8,6 +8,7 @@ from tqdm import tqdm  # optional progress bar
 from preprocess import load_dataset
 from transformers import GPT2Tokenizer
 from model import GPT24QUAC
+from scorer import f1_score
 
 # TODO: Set hyperparameters
 hyperparams = {
@@ -38,13 +39,32 @@ def train(model, train_loader, optimizer, experiment, hyperparams):
 def test(model, test_loader, experiment, hyperparams):
     model.eval()
     with experiment.test(), torch.no_grad():
-        # TODO: Write testing loop
-        perplexity = None
-        accuracy = None
-        experiment.log_metric("perplexity", perplexity)
-        experiment.log_metric("accuracy", accuracy)
-        pass
+        f1_sum = 0
+        f1_count = 0
+        for batch in tqdm(test_loader):
+            inputs = batch['inputs'].to(device)
+            start_pos = batch['start_pos'].to(device)
+            end_pos = batch['end_pos'].to(device)
+            context = batch['context'].to(device)
+            start_logits, end_logits = model(inputs)
+            pred_start = np.argmax(start_logits.cpu().detach().numpy(), axis=1)
+            pred_end = np.argmax(end_logits.cpu().detach().numpy(), axis=1)
+            ground_truth = id_to_text(context, start_pos.cpu().detach().numpy(), end_pos.cpu().detach().numpy())
+            prediction = id_to_text(context, pred_start, pred_end)
+            f1_sum += f1_score(prediction, ground_truth)
+            f1_count += 1
+        f1_avg = f1_sum / f1_count
+        experiment.log_metric("f1", f1_avg)
 
+
+def id_to_text(context, start_pos, end_pos):
+    result = []
+    for index, (i, j) in enumerate(zip(start_pos, end_pos)):
+        if i == j:
+            result.append('CANNOTANSWER')
+        else:
+            result.append(context[index][i:j + 1])
+    return  result
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

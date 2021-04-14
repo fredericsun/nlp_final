@@ -10,6 +10,8 @@ class ModelDataset(Dataset):
         self.start_pos = []
         self.end_pos = []
         self.token_type = []
+        self.context = []
+        self.q2con = []
 
         with open(input_file) as f:
             for data in json.load(f)['data']:
@@ -29,6 +31,8 @@ class ModelDataset(Dataset):
                         answer_len = len(tokenizer.tokenize(qas['orig_answer']['text']))
                         self.start_pos.append(torch.tensor(answer_start))
                         self.end_pos.append(torch.tensor(answer_start + answer_len))
+                    self.q2con.append(len(self.context))
+                self.context.append(data['context'])
         self.inputs = pad_sequence(self.inputs, batch_first=True, padding_value=0)
 
     def __len__(self):
@@ -36,12 +40,14 @@ class ModelDataset(Dataset):
         return len(self.inputs)
 
     def __getitem__(self, idx):
+        context = self.context[self.q2con[idx]]
 
         item = {
             "inputs": self.inputs[idx],
             "start_pos": self.start_pos[idx],
             "end_pos": self.end_pos[idx],
-            "token_type": self.token_type[idx]
+            "token_type": self.token_type[idx],
+            "context": context
         }
         return item
 
