@@ -64,7 +64,7 @@ def id_to_text(context, start_pos, end_pos):
             result.append('CANNOTANSWER')
         else:
             result.append(context[index][i:j + 1])
-    return  result
+    return result
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
