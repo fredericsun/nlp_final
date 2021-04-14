@@ -60,10 +60,10 @@ def test(model, test_loader, experiment, hyperparams):
 def id_to_text(context, start_pos, end_pos):
     result = []
     for index, (i, j) in enumerate(zip(start_pos, end_pos)):
-        if i == j:
+        if i < 0 or j >= len(context) or i >= j:
             result.append('CANNOTANSWER')
         else:
-            result.append(context[index][i:j + 1])
+            result.append(context[index][i:j+1])
     return result
 
 if __name__ == "__main__":
@@ -81,14 +81,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # TODO: Make sure you modify the `.comet.config` file
-    experiment = Experiment(log_code=False)
-    experiment.log_parameters(hyperparams)
+    # experiment = Experiment(log_code=False)
+    # experiment.log_parameters(hyperparams)
 
     tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     tokenizer.add_special_tokens({"sep_token": "<SEP>",
                                   "bos_token": "<BOS>",
                                   "eos_token": "<EOS>",
                                   "pad_token": "<PAD>"})
+    tokenizer.add_tokens("CANNOTANSWER")
 
     train_loader, test_loader = load_dataset([args.train_file, args.test_file], tokenizer, batch_size=hyperparams["batch_size"])
 

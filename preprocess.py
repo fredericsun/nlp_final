@@ -23,14 +23,11 @@ class ModelDataset(Dataset):
                     self.inputs.append(torch.tensor(cur_input))
                     segment_ids = [1] + [0] * len(context) + [1] * (len(q) + 2)
                     self.token_type.append(torch.tensor(segment_ids))
-                    if qas['orig_answer']['text'] == 'CANNOTANSWER':
-                        self.start_pos.append(torch.tensor(-1))
-                        self.end_pos.append(torch.tensor(-1))
-                    else:
-                        answer_start = qas['orig_answer']['answer_start']
-                        answer_len = len(tokenizer.tokenize(qas['orig_answer']['text']))
-                        self.start_pos.append(torch.tensor(answer_start))
-                        self.end_pos.append(torch.tensor(answer_start + answer_len))
+                    answer_start = qas['orig_answer']['answer_start']
+                    answer_start = len(tokenizer.tokenize(data['context'][0:answer_start]))
+                    answer_len = len(tokenizer.tokenize(qas['orig_answer']['text']))
+                    self.start_pos.append(torch.tensor(answer_start))
+                    self.end_pos.append(torch.tensor(answer_start + answer_len))
                     self.q2con.append(len(self.context))
                 self.context.append(data['context'])
         self.inputs = pad_sequence(self.inputs, batch_first=True, padding_value=0)
