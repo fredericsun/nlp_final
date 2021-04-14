@@ -94,6 +94,7 @@ if __name__ == "__main__":
     train_loader, test_loader = load_dataset([args.train_file, args.test_file], tokenizer, batch_size=hyperparams["batch_size"])
 
     model = GPT24QUAC()
+    model.resize_token_embeddings(len(tokenizer))
 
     optimizer = optim.Adam(model.parameters(), lr=hyperparams['lr'])
 

@@ -40,3 +40,6 @@ class GPT24QUAC(nn.Module):
 
     def dummy_inputs(self):
         return self.gpt2.dummy_inputs
+
+    def resize_token_embeddings(self, new_size):
+        self.gpt2.resize_token_embeddings(new_size)
