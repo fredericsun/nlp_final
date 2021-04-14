@@ -1,12 +1,12 @@
 from comet_ml import Experiment
-from preprocess import MyDataset, read_file
-from model import BERT
 from torch.utils.data import DataLoader
 from torch import nn, optim
 import torch
 import numpy as np
 import argparse
 from tqdm import tqdm  # optional progress bar
+from preprocess import ModelDataset, load_dataset
+from transformers import GPT2Tokenizer, GPT2LMHeadModel
 
 # TODO: Set hyperparameters
 hyperparams = {
@@ -65,35 +65,26 @@ if __name__ == "__main__":
                         help="run training loop")
     parser.add_argument("-t", "--test", action="store_true",
                         help="run testing loop")
-    parser.add_argument("-a", "--analysis", action="store_true",
-                        help="run embedding analysis")
     args = parser.parse_args()
 
     # TODO: Make sure you modify the `.comet.config` file
-    experiment = Experiment(log_code=False)
-    experiment.log_parameters(hyperparams)
+    # experiment = Experiment(log_code=False)
+    # experiment.log_parameters(hyperparams)
 
-    # TODO: Load dataset
-    train_set = None
-    test_set = None
-    word2vec = None
-    train_loader = None
-    test_loader = None
-    num_tokens = None
+    tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+    tokenizer.add_special_tokens({"sep_token": "<SEP>",
+                                  "bos_token": "<BOS>",
+                                  "eos_token": "<EOS>",
+                                  "pad_token": "<PAD>"})
 
-    model = BERT(hyperparams["seq_len"], num_tokens, n=2).to(device)
-    loss_fn = None
-    optimizer = None
+    train_loader, test_loader = load_dataset([args.train_file, args.test_file], tokenizer, batch_size=hyperparams["batch_size"])
 
-    if args.load:
-        model.load_state_dict(torch.load('./model.pt'))
-    if args.train:
-        train(model, train_loader, loss_fn, optimizer, word2vec, experiment,
-              hyperparams)
-    if args.test:
-        test(model, test_loader, loss_fn, word2vec, experiment, hyperparams)
-    if args.save:
-        torch.save(model.state_dict(), './model.pt')
-    if args.analysis:
-        embedding_analysis(model, experiment, train_set, test_set,
-                           hyperparams["batch_size"])
+    # if args.load:
+    #     model.load_state_dict(torch.load('./model.pt'))
+    # if args.train:
+    #     train(model, train_loader, loss_fn, optimizer, word2vec, experiment,
+    #           hyperparams)
+    # if args.test:
+    #     test(model, test_loader, loss_fn, word2vec, experiment, hyperparams)
+    # if args.save:
+    #     torch.save(model.state_dict(), './model.pt')

@@ -1,35 +1,35 @@
 from torch.utils.data import Dataset, DataLoader
 import torch
 from torch.nn.utils.rnn import pad_sequence
+import json
 
 
 class ModelDataset(Dataset):
-    def __init__(self, input_file, tokenizer, gpt=False):
+    def __init__(self, input_file, tokenizer):
         self.inputs = []
-        self.labels = []
-        self.length = []
+        self.start_pos = []
+        self.end_pos = []
+        self.token_type = []
 
-        data = []
         with open(input_file) as f:
-            for line in f.readlines():
-                data.append(line.strip())
-        data = data[1:]
-
-        for line in data:
-            cur_label = tokenizer.encode(line)
-            if not gpt:
-                line = "START " + line[:-5]
-            cur_input = tokenizer.encode(line)
-            self.length.append(len(cur_input))
-            self.inputs.append(torch.LongTensor(cur_input))
-            self.labels.append(torch.LongTensor(cur_label))
-
-        self.inputs = pad_sequence(self.inputs, batch_first=True)
-        if gpt:
-            self.labels = pad_sequence(
-                self.labels, batch_first=True, padding_value=-100)
-        else:
-            self.labels = pad_sequence(self.labels, batch_first=True)
+            for data in json.load(f)['data']:
+                data = data['paragraphs'][0]
+                context = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(data['context']))
+                for qas in data['qas']:
+                    q = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(qas['question']))
+                    cur_input = [tokenizer.bos_token_id] + context + [tokenizer.sep_token_id] + q + [tokenizer.eos_token_id]
+                    self.inputs.append(torch.tensor(cur_input))
+                    segment_ids = [1] + [0] * len(context) + [1] * (len(q) + 2)
+                    self.token_type.append(torch.tensor(segment_ids))
+                    if qas['orig_answer']['text'] == 'CANNOTANSWER':
+                        self.start_pos.append(torch.tensor(-1))
+                        self.end_pos.append(torch.tensor(-1))
+                    else:
+                        answer_start = qas['orig_answer']['answer_start']
+                        answer_len = len(tokenizer.tokenize(qas['orig_answer']['text']))
+                        self.start_pos.append(torch.tensor(answer_start))
+                        self.end_pos.append(torch.tensor(answer_start + answer_len))
+        self.inputs = pad_sequence(self.inputs, batch_first=True, padding_value=0)
 
     def __len__(self):
 
@@ -39,15 +39,16 @@ class ModelDataset(Dataset):
 
         item = {
             "inputs": self.inputs[idx],
-            "labels": self.labels[idx],
-            "length": self.length[idx]
+            "start_pos": self.start_pos[idx],
+            "end_pos": self.end_pos[idx],
+            "token_type": self.token_type[idx]
         }
         return item
 
 
-def load_dataset(fn, tokenizer, batch_size, gpt=False):
-    train_data = ModelDataset(fn[0], tokenizer, gpt)
-    test_data = ModelDataset(fn[1], tokenizer, gpt)
+def load_dataset(fn, tokenizer, batch_size):
+    train_data = ModelDataset(fn[0], tokenizer)
+    test_data = ModelDataset(fn[1], tokenizer)
 
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
