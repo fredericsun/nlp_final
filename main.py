@@ -6,7 +6,7 @@ import numpy as np
 import argparse
 from tqdm import tqdm  # optional progress bar
 from preprocess import load_dataset
-from transformers import GPT2Tokenizer
+from transformers import GPT2Tokenizer, GPT2Config
 from model import GPT24QUAC
 from scorer import f1_score
 
@@ -14,7 +14,9 @@ from scorer import f1_score
 hyperparams = {
     "num_epochs": 10,
     "batch_size": 100,
-    "lr": 0.001
+    "lr": 0.001,
+    "max_seq_len": 1024,
+    "window_stride": 128
 }
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -93,10 +95,15 @@ if __name__ == "__main__":
                                   "pad_token": "<PAD>"})
     tokenizer.add_tokens("CANNOTANSWER")
 
-    train_loader, test_loader, test_context = load_dataset([args.train_file, args.test_file], tokenizer, batch_size=hyperparams["batch_size"])
+    configuration = GPT2Config()
 
     model = GPT24QUAC()
     model.resize_token_embeddings(len(tokenizer) + 1)
+
+    train_loader, test_loader, test_context = load_dataset([args.train_file, args.test_file], tokenizer,
+                                                           batch_size=hyperparams["batch_size"],
+                                                           max_seq_len=hyperparams['hyperparams'],
+                                                           window_stride=hyperparams['window_stride'])
 
     optimizer = optim.Adam(model.parameters(), lr=hyperparams['lr'])
 
