@@ -61,8 +61,9 @@ def test(model, test_loader, tokenizer, experiment, hyperparams):
             pred_end = np.argmax(end_logits.cpu().detach().numpy(), axis=1)
             ground_truth = id_to_text(tokenizer, context, start_pos.cpu().detach().numpy(), end_pos.cpu().detach().numpy())
             prediction = id_to_text(tokenizer, context, pred_start, pred_end)
-            f1_sum += f1_score(prediction, ground_truth)
-            f1_count += 1
+            for pred, truth in zip(prediction, ground_truth):
+                f1_sum += f1_score(pred, truth)
+                f1_count += 1
         f1_avg = f1_sum / f1_count
         experiment.log_metric("f1", f1_avg)
 
@@ -102,7 +103,7 @@ if __name__ == "__main__":
                                   "pad_token": "<PAD>"})
     tokenizer.add_tokens("CANNOTANSWER")
 
-    model = GPT24QUAC()
+    model = GPT24QUAC().to(device)
     model.resize_token_embeddings(len(tokenizer))
 
     train_loader, test_loader = load_dataset([args.train_file, args.test_file], tokenizer,
