@@ -13,7 +13,7 @@ from scorer import f1_score
 # TODO: Set hyperparameters
 hyperparams = {
     "num_epochs": 10,
-    "batch_size": 100,
+    "batch_size": 20,
     "lr": 0.001,
     "max_seq_len": 1024,
     "window_stride": 128
@@ -38,7 +38,7 @@ def train(model, train_loader, optimizer, experiment, hyperparams):
                 experiment.log_metric("loss", loss.cpu().detach().numpy())
 
 
-def test(model, test_loader, test_context, experiment, hyperparams):
+def test(model, test_loader, tokenizer, experiment, hyperparams):
     model.eval()
     with experiment.test(), torch.no_grad():
         f1_sum = 0
@@ -47,26 +47,33 @@ def test(model, test_loader, test_context, experiment, hyperparams):
             inputs = batch['inputs'].to(device)
             start_pos = batch['start_pos'].to(device)
             end_pos = batch['end_pos'].to(device)
-            q2con = batch['q2con'].to(device)
-            context = [test_context[q2con[i]] for i in q2con]
+            token_ids = batch['token_type'].to(device)
+            context = []
+            for token_id, input in zip(token_ids, inputs):
+                context_id = []
+                for index, id in enumerate(token_id):
+                    if id == 0:
+                        context_id.append(input[index])
+                context.append(context_id)
+
             start_logits, end_logits = model(inputs)
             pred_start = np.argmax(start_logits.cpu().detach().numpy(), axis=1)
             pred_end = np.argmax(end_logits.cpu().detach().numpy(), axis=1)
-            ground_truth = id_to_text(context, start_pos.cpu().detach().numpy(), end_pos.cpu().detach().numpy())
-            prediction = id_to_text(context, pred_start, pred_end)
+            ground_truth = id_to_text(tokenizer, context, start_pos.cpu().detach().numpy(), end_pos.cpu().detach().numpy())
+            prediction = id_to_text(tokenizer, context, pred_start, pred_end)
             f1_sum += f1_score(prediction, ground_truth)
             f1_count += 1
         f1_avg = f1_sum / f1_count
         experiment.log_metric("f1", f1_avg)
 
 
-def id_to_text(context, start_pos, end_pos):
+def id_to_text(tokenizer, context, start_pos, end_pos):
     result = []
     for index, (i, j) in enumerate(zip(start_pos, end_pos)):
-        if i < 0 or j >= len(context) or i >= j:
+        if i < 0 or j >= len(context[index]) or i >= j:
             result.append('CANNOTANSWER')
         else:
-            result.append(context[index][i:j+1])
+            result.append(tokenizer.decode(context[index][i:j+1]))
     return result
 
 if __name__ == "__main__":
@@ -95,12 +102,10 @@ if __name__ == "__main__":
                                   "pad_token": "<PAD>"})
     tokenizer.add_tokens("CANNOTANSWER")
 
-    configuration = GPT2Config()
-
     model = GPT24QUAC()
-    model.resize_token_embeddings(len(tokenizer) + 1)
+    model.resize_token_embeddings(len(tokenizer))
 
-    train_loader, test_loader, test_context = load_dataset([args.train_file, args.test_file], tokenizer,
+    train_loader, test_loader = load_dataset([args.train_file, args.test_file], tokenizer,
                                                            batch_size=hyperparams["batch_size"],
                                                            max_seq_len=hyperparams['max_seq_len'],
                                                            window_stride=hyperparams['window_stride'])
@@ -112,6 +117,6 @@ if __name__ == "__main__":
     if args.train:
         train(model, train_loader, optimizer, experiment, hyperparams)
     if args.test:
-        test(model, test_loader, test_context, experiment, hyperparams)
+        test(model, test_loader, tokenizer, experiment, hyperparams)
     if args.save:
         torch.save(model.state_dict(), './model.pt')

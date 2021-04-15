@@ -10,8 +10,6 @@ class ModelDataset(Dataset):
         self.start_pos = []
         self.end_pos = []
         self.token_type = []
-        self.context = []
-        self.q2con = []
 
         with open(input_file) as f:
             for data in json.load(f)['data']:
@@ -48,15 +46,11 @@ class ModelDataset(Dataset):
                         else:
                             self.start_pos.append(torch.tensor(len(context_span)))
                             self.end_pos.append(torch.tensor(len(context_span) + len(no_answer)))
-
-                        self.q2con.append(len(self.context))
                         if start_offset + chunk_size >= len(context):
                             break
                         start_offset += window_stride
-
-                self.context.append(data['context'])
         self.inputs = pad_sequence(self.inputs, batch_first=True, padding_value=0)
-        self.token_type = pad_sequence(self.token_type, batch_first=True, padding_value=0) # TODO
+        self.token_type = pad_sequence(self.token_type, batch_first=True, padding_value=1) # TODO
 
     def __len__(self):
 
@@ -68,8 +62,7 @@ class ModelDataset(Dataset):
             "inputs": self.inputs[idx],
             "start_pos": self.start_pos[idx],
             "end_pos": self.end_pos[idx],
-            "token_type": self.token_type[idx],
-            "q2con": self.q2con[idx]
+            "token_type": self.token_type[idx]
         }
         return item
 
@@ -81,4 +74,4 @@ def load_dataset(fn, tokenizer, batch_size, max_seq_len, window_stride):
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
 
-    return train_loader, test_loader, test_data.context
+    return train_loader, test_loader
