@@ -19,38 +19,44 @@ class ModelDataset(Dataset):
                 assert(tokenizer.tokenize(data['context'])[-1] == 'CANNOTANSWER')
                 context = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(data['context'])[:-1])
                 no_answer = tokenizer.convert_tokens_to_ids(tokenizer.tokenize('CANNOTANSWER'))
-                start_offset = 0
                 for qas in data['qas']:
                     q = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(qas['question']))
 
                     context_span_len = max_seq_len - len(q) - len(no_answer) - 3
-                    context_span = context[start_offset:start_offset+context_span_len]
 
-                    cur_input = [tokenizer.bos_token_id] + context_span + no_answer + [tokenizer.sep_token_id] + q + [tokenizer.eos_token_id]
-                    self.inputs.append(torch.tensor(cur_input))
-                    segment_ids = [1] + [0] * (len(context_span) + len(no_answer)) + [1] * (len(q) + 2)
-                    self.token_type.append(torch.tensor(segment_ids))
+                    start_offset = 0
+                    while True:
+                        chunk_size = context_span_len
+                        if start_offset + chunk_size > len(context):
+                            chunk_size = len(context) - start_offset
 
-                    answer_start = qas['orig_answer']['answer_start']
-                    answer_start = len(tokenizer.tokenize(data['context'][0:answer_start])) - start_offset
-                    answer_len = len(tokenizer.tokenize(qas['orig_answer']['text']))
-                    answer_end = answer_start + answer_len
+                        context_span = context[start_offset:start_offset+chunk_size]
 
-                    if 0 <= answer_start < answer_end < len(context_span):
-                        self.start_pos.append(torch.tensor(answer_start))
-                        self.end_pos.append(torch.tensor(answer_end))
-                    else:
-                        self.start_pos.append(torch.tensor(len(context_span)))
-                        self.end_pos.append(torch.tensor(len(context_span) + len(no_answer)))
+                        cur_input = [tokenizer.bos_token_id] + context_span + no_answer + [tokenizer.sep_token_id] + q + [tokenizer.eos_token_id]
+                        self.inputs.append(torch.tensor(cur_input))
+                        segment_ids = [1] + [0] * (len(context_span) + len(no_answer)) + [1] * (len(q) + 2)
+                        self.token_type.append(torch.tensor(segment_ids))
 
-                    next_stride = min(window_stride, len(context) - (start_offset + len(context_span)))
+                        answer_start = qas['orig_answer']['answer_start']
+                        answer_start = len(tokenizer.tokenize(data['context'][0:answer_start])) - start_offset
+                        answer_len = len(tokenizer.tokenize(qas['orig_answer']['text']))
+                        answer_end = answer_start + answer_len
 
-                    start_offset += next_stride
+                        if 0 <= answer_start < answer_end < len(context_span):
+                            self.start_pos.append(torch.tensor(answer_start))
+                            self.end_pos.append(torch.tensor(answer_end))
+                        else:
+                            self.start_pos.append(torch.tensor(len(context_span)))
+                            self.end_pos.append(torch.tensor(len(context_span) + len(no_answer)))
 
-                    self.q2con.append(len(self.context))
+                        self.q2con.append(len(self.context))
+                        if start_offset + chunk_size >= len(context):
+                            break
+                        start_offset += window_stride
+
                 self.context.append(data['context'])
         self.inputs = pad_sequence(self.inputs, batch_first=True, padding_value=0)
-        self.token_type = pad_sequence(self.token_type, batch_first=True, padding_value=-1)
+        self.token_type = pad_sequence(self.token_type, batch_first=True, padding_value=0) # TODO
 
     def __len__(self):
 

@@ -102,7 +102,7 @@ if __name__ == "__main__":
 
     train_loader, test_loader, test_context = load_dataset([args.train_file, args.test_file], tokenizer,
                                                            batch_size=hyperparams["batch_size"],
-                                                           max_seq_len=hyperparams['hyperparams'],
+                                                           max_seq_len=hyperparams['max_seq_len'],
                                                            window_stride=hyperparams['window_stride'])
 
     optimizer = optim.Adam(model.parameters(), lr=hyperparams['lr'])
