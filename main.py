@@ -15,8 +15,8 @@ hyperparams = {
     "num_epochs": 10,
     "batch_size": 20,
     "lr": 0.001,
-    "max_seq_len": 1024,
-    "window_stride": 128
+    "max_seq_len": 512,
+    "window_stride": 64
 }
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
