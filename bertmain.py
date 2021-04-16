@@ -5,9 +5,8 @@ import torch
 import numpy as np
 import argparse
 from tqdm import tqdm  # optional progress bar
-from preprocess import load_dataset, load_hae_dataset
+from preprocess import load_hae_dataset
 from transformers import GPT2Tokenizer, BertTokenizer
-from model import GPT24QUAC
 from bertModel import BERT4QUAC
 from scorer import f1_score
 
@@ -32,7 +31,8 @@ def train(model, train_loader, optimizer, experiment, hyperparams):
                 start_pos = batch['start_pos'].to(device)
                 end_pos = batch['end_pos'].to(device)
                 token_type = batch['token_type'].to(device)
-                loss = model(inputs, token_type_ids=token_type, start_pos=start_pos, end_pos=end_pos)
+                history_mask = batch["history_mask"].to(device)
+                loss = model(inputs, token_type_ids=token_type, start_positions=start_pos, end_positions=end_pos, history_type_ids=history_mask)[0]
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -49,6 +49,7 @@ def test(model, test_loader, tokenizer, experiment, hyperparams):
             start_pos = batch['start_pos'].to(device)
             end_pos = batch['end_pos'].to(device)
             token_ids = batch['token_type'].to(device)
+            history_mask = batch["history_mask"].to(device)
             context = []
             for token_id, input in zip(token_ids, inputs):
                 context_id = []
@@ -57,7 +58,7 @@ def test(model, test_loader, tokenizer, experiment, hyperparams):
                         context_id.append(input[index])
                 context.append(context_id)
 
-            start_logits, end_logits = model(inputs)
+            start_logits, end_logits = model(inputs, token_type_ids=token_ids, history_type_ids=history_mask)[:2]
             pred_start = np.argmax(start_logits.cpu().detach().numpy(), axis=1)
             pred_end = np.argmax(end_logits.cpu().detach().numpy(), axis=1)
             ground_truth = id_to_text(tokenizer, context, start_pos.cpu().detach().numpy(), end_pos.cpu().detach().numpy())
@@ -97,16 +98,15 @@ if __name__ == "__main__":
     experiment = Experiment(log_code=False)
     experiment.log_parameters(hyperparams)
 
-    model = GPT24QUAC().to(device)
-    tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+    tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
     tokenizer.add_special_tokens({"sep_token": "<SEP>",
                                     "bos_token": "<BOS>",
                                     "eos_token": "<EOS>",
                                     "pad_token": "<PAD>"})
     tokenizer.add_tokens("CANNOTANSWER")
-    model.resize_token_embeddings(len(tokenizer))
+    model = BERT4QUAC(len(tokenizer)).to(device)
 
-    train_loader, test_loader = load_dataset([args.train_file, args.test_file], tokenizer,
+    train_loader, test_loader = load_hae_dataset([args.train_file, args.test_file], tokenizer,
                                             batch_size=hyperparams["batch_size"],
                                             max_seq_len=hyperparams['max_seq_len'],
                                             window_stride=hyperparams['window_stride'])
