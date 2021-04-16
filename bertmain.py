@@ -12,8 +12,8 @@ from scorer import f1_score
 
 # TODO: Set hyperparameters
 hyperparams = {
-    "num_epochs": 10,
-    "batch_size": 10,
+    "num_epochs": 2,
+    "batch_size": 4,
     "lr": 0.001,
     "max_seq_len": 512,
     "window_stride": 64
