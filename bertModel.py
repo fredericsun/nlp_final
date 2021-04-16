@@ -4,9 +4,10 @@ from transformers import BertForQuestionAnswering
 
 
 class BERT4QUAC(nn.Module):
-    def __init__(self):
+    def __init__(self, embedding_size):
         super(BERT4QUAC, self).__init__()
         bert_qa = BertForQuestionAnswering.from_pretrained("bert-base-cased")
+        bert_qa.resize_token_embeddings(embedding_size)
         pretrained_bert_layers = bert_qa.bert
         config = bert_qa.config
 
@@ -62,6 +63,7 @@ class BERT4QUAC(nn.Module):
             outputs = (total_loss,) + outputs
 
         return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
+
 
 class HAEBERT(nn.Module):
     def __init__(self, pretrained_bert_layers, config):

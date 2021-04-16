@@ -99,21 +99,23 @@ if __name__ == "__main__":
     experiment = Experiment(log_code=False)
     experiment.log_parameters(hyperparams)
 
-    tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-
     if args.bert:
-        model = BERT4QUAC().to(device)
         tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
+        tokenizer.add_special_tokens({"sep_token": "<SEP>",
+                                      "bos_token": "<BOS>",
+                                      "eos_token": "<EOS>",
+                                      "pad_token": "<PAD>"})
+        tokenizer.add_tokens("CANNOTANSWER")
+        model = BERT4QUAC(len(tokenizer)).to(device)
     else:
         model = GPT24QUAC().to(device)
         tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-
-    tokenizer.add_special_tokens({"sep_token": "<SEP>",
-                                  "bos_token": "<BOS>",
-                                  "eos_token": "<EOS>",
-                                  "pad_token": "<PAD>"})
-    tokenizer.add_tokens("CANNOTANSWER")
-    model.resize_token_embeddings(len(tokenizer))
+        tokenizer.add_special_tokens({"sep_token": "<SEP>",
+                                      "bos_token": "<BOS>",
+                                      "eos_token": "<EOS>",
+                                      "pad_token": "<PAD>"})
+        tokenizer.add_tokens("CANNOTANSWER")
+        model.resize_token_embeddings(len(tokenizer))
 
     train_loader, test_loader = load_dataset([args.train_file, args.test_file], tokenizer,
                                              batch_size=hyperparams["batch_size"],
