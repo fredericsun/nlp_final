@@ -5,7 +5,7 @@ import torch
 import numpy as np
 import argparse
 from tqdm import tqdm  # optional progress bar
-from preprocess import load_dataset
+from preprocess import load_dataset, load_hae_dataset
 from transformers import GPT2Tokenizer, BertTokenizer
 from model import GPT24QUAC
 from bertModel import BERT4QUAC
@@ -115,11 +115,18 @@ if __name__ == "__main__":
     tokenizer.add_tokens("CANNOTANSWER")
     model.resize_token_embeddings(len(tokenizer))
 
-    train_loader, test_loader = load_dataset([args.train_file, args.test_file], tokenizer,
-                                             batch_size=hyperparams["batch_size"],
-                                             max_seq_len=hyperparams['max_seq_len'],
-                                             window_stride=hyperparams['window_stride'])
+    if args.bert:
+        train_loader, test_loader = load_hae_dataset([args.train_file, args.test_file], tokenizer,
+                                                batch_size=hyperparams["batch_size"],
+                                                max_seq_len=hyperparams['max_seq_len'],
+                                                window_stride=hyperparams['window_stride'])
+    else:
+        train_loader, test_loader = load_dataset([args.train_file, args.test_file], tokenizer,
+                                                batch_size=hyperparams["batch_size"],
+                                                max_seq_len=hyperparams['max_seq_len'],
+                                                window_stride=hyperparams['window_stride'])
 
+    print("loaded dataset")
     optimizer = optim.Adam(model.parameters(), lr=hyperparams['lr'])
 
     if args.load:
