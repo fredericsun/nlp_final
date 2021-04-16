@@ -192,7 +192,10 @@ class HAEBERT(nn.Module):
             encoder_attention_mask=encoder_extended_attention_mask,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output)
+        if self.pooler is not None:
+            pooled_output = self.pooler(sequence_output)
+        else:
+            pooled_output = sequence_output
 
         outputs = (sequence_output, pooled_output,) + encoder_outputs[1:]
         return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
