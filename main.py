@@ -6,8 +6,9 @@ import numpy as np
 import argparse
 from tqdm import tqdm  # optional progress bar
 from preprocess import load_dataset
-from transformers import GPT2Tokenizer, GPT2Config
+from transformers import GPT2Tokenizer, BertTokenizer
 from model import GPT24QUAC
+from bertModel import BERT4QUAC
 from scorer import f1_score
 
 # TODO: Set hyperparameters
@@ -77,6 +78,7 @@ def id_to_text(tokenizer, context, start_pos, end_pos):
             result.append(tokenizer.decode(context[index][i:j+1]))
     return result
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("train_file")
@@ -89,6 +91,8 @@ if __name__ == "__main__":
                         help="run training loop")
     parser.add_argument("-t", "--test", action="store_true",
                         help="run testing loop")
+    parser.add_argument("-b", "--bert", action="store_true",
+                        help="use bert history model")
     args = parser.parse_args()
 
     # TODO: Make sure you modify the `.comet.config` file
@@ -97,19 +101,24 @@ if __name__ == "__main__":
 
     tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
 
+    if args.bert:
+        model = BERT4QUAC().to(device)
+        tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
+    else:
+        model = GPT24QUAC().to(device)
+        tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+
     tokenizer.add_special_tokens({"sep_token": "<SEP>",
                                   "bos_token": "<BOS>",
                                   "eos_token": "<EOS>",
                                   "pad_token": "<PAD>"})
     tokenizer.add_tokens("CANNOTANSWER")
-
-    model = GPT24QUAC().to(device)
     model.resize_token_embeddings(len(tokenizer))
 
     train_loader, test_loader = load_dataset([args.train_file, args.test_file], tokenizer,
-                                                           batch_size=hyperparams["batch_size"],
-                                                           max_seq_len=hyperparams['max_seq_len'],
-                                                           window_stride=hyperparams['window_stride'])
+                                             batch_size=hyperparams["batch_size"],
+                                             max_seq_len=hyperparams['max_seq_len'],
+                                             window_stride=hyperparams['window_stride'])
 
     optimizer = optim.Adam(model.parameters(), lr=hyperparams['lr'])
 
