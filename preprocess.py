@@ -78,6 +78,7 @@ class HAEDataset(Dataset):
         self.end_pos = []
         self.token_type = []
         self.history_masks = []
+        self.context_offsets = []
 
         with open(input_file) as f:
             for data in json.load(f)['data']:
@@ -111,6 +112,7 @@ class HAEDataset(Dataset):
                         cur_input = [tokenizer.bos_token_id] + q + [tokenizer.sep_token_id] + history + context_span + no_answer + [tokenizer.eos_token_id]
                         segment_ids = [1] * (len(q) + 2) + [0] * (len(history) + len(context_span) + len(no_answer)) + [1]
                         history_mask = [0] * (len(q) + 2) + [1] * len(history) + [0] * (len(context_span) + len(no_answer)+ 1)
+                        assert(len(cur_input) == len(segment_ids) == len(history_mask))
 
                         self.inputs.append(torch.tensor(cur_input))
                         self.token_type.append(torch.tensor(segment_ids))
@@ -121,12 +123,14 @@ class HAEDataset(Dataset):
                         answer_len = len(tokenizer.tokenize(qas['orig_answer']['text']))
                         answer_end = answer_start + answer_len
 
+                        context_offset = 1 + len(q) + 1 + len(history)
+                        self.context_offsets.append(torch.tensor(context_offset))
                         if 0 <= answer_start < answer_end < len(context_span):
-                            self.start_pos.append(torch.tensor(answer_start))
-                            self.end_pos.append(torch.tensor(answer_end))
+                            self.start_pos.append(torch.tensor(answer_start + context_offset))
+                            self.end_pos.append(torch.tensor(answer_end + context_offset))
                         else:
-                            self.start_pos.append(torch.tensor(len(context_span)))
-                            self.end_pos.append(torch.tensor(len(context_span) + len(no_answer)))
+                            self.start_pos.append(torch.tensor(len(context_span) + context_offset))
+                            self.end_pos.append(torch.tensor(len(context_span) + len(no_answer) + context_offset))
                         if start_offset + chunk_size >= len(context):
                             break
                         start_offset += window_stride
@@ -146,6 +150,7 @@ class HAEDataset(Dataset):
             "end_pos": self.end_pos[idx],
             "token_type": self.token_type[idx],
             "history_mask": self.history_masks[idx], # Q1[SEP]A1[SEP]Q2[SEP]A2
+            "context_offset": self.context_offsets[idx],
         }
         return item
 
