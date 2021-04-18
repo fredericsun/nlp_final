@@ -96,7 +96,7 @@ class HAEDataset(Dataset):
                     for turn in history:
                         history_txt.append(turn["question"])
                         history_txt.append(turn["orig_answer"]["text"])
-                    history = tokenizer.encode(" ".join(history_txt))
+                    history = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(" ".join(history_txt)))
 
                     ################## Context Sliding Window ##################
                     context_span_len = max_seq_len - len(q) - len(no_answer) - len(history) - 3
