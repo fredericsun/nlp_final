@@ -52,11 +52,11 @@ def test(model, test_loader, tokenizer, experiment, hyperparams):
             history_mask = batch["history_mask"].to(device)
             context_offset = batch["context_offset"].cpu().numpy()
             context = []
-            for token_id, input, history in zip(token_ids, inputs, history_mask):
+            for token_id, seq, history in zip(token_ids, inputs, history_mask):
                 context_id = []
                 for index, (id, hist) in enumerate(zip(token_id, history)):
                     if id == 0 and hist == 0:
-                        context_id.append(input[index])
+                        context_id.append(seq[index])
                 context.append(context_id)
 
             start_logits, end_logits = model(inputs, token_type_ids=token_ids, history_type_ids=history_mask)[:2]
@@ -79,7 +79,7 @@ def id_to_text(tokenizer, context, start_pos, end_pos, context_offset):
         if i < 0 or j >= len(context[index]) or i >= j:
             result.append('CANNOTANSWER')
         else:
-            result.append(tokenizer.decode(context[index][i:j+1]))
+            result.append(tokenizer.decode(context[index][i:j]))
     return result
 
 
