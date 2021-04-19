@@ -13,20 +13,20 @@ from scorer import f1_score
 # TODO: Set hyperparameters
 hyperparams = {
     "num_epochs": 1,
-    "batch_size": 4,
-    "lr": 0.01,
-    "max_seq_len": 512,
+    "batch_size": 8,
+    "lr": 0.00001,
+    "max_seq_len": 400,
     "window_stride": 64
 }
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def train(model, train_loader, optimizer, experiment, hyperparams):
+def train(model, train_loader, optimizer, experiment, hyperparams, test_loader):
     model.train()
     with experiment.train():
         epoch = hyperparams['num_epochs']
         for i in range(epoch):
-            for batch in tqdm(train_loader):
+            for step, batch in enumerate(tqdm(train_loader)):
                 inputs = batch['inputs'].to(device)
                 start_pos = batch['start_pos'].to(device)
                 end_pos = batch['end_pos'].to(device)
@@ -38,13 +38,21 @@ def train(model, train_loader, optimizer, experiment, hyperparams):
                 optimizer.step()
                 experiment.log_metric("loss", loss.cpu().detach().numpy())
 
+                try:
+                    if step > 0 and step % 10000 == 0:
+                        torch.save(model.state_dict(), './model_cache/model_%d.pt'%step)
+                except:
+                    pass
 
-def test(model, test_loader, tokenizer, experiment, hyperparams):
+
+def test(model, test_loader, tokenizer, experiment, hyperparams, small=False):
     model.eval()
     with experiment.test(), torch.no_grad():
         f1_sum = 0
         f1_count = 0
-        for batch in tqdm(test_loader):
+        for i, batch in enumerate(tqdm(test_loader)):
+            if small and i >= 300:
+                break
             inputs = batch['inputs'].to(device)
             start_pos = batch['start_pos'].to(device)
             end_pos = batch['end_pos'].to(device)
@@ -119,7 +127,7 @@ if __name__ == "__main__":
     if args.load:
         model.load_state_dict(torch.load('./model.pt'))
     if args.train:
-        train(model, train_loader, optimizer, experiment, hyperparams)
+        train(model, train_loader, optimizer, experiment, hyperparams, test_loader)
     if args.test:
         test(model, test_loader, tokenizer, experiment, hyperparams)
     if args.save:

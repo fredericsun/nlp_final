@@ -4,6 +4,7 @@ from torch.nn.utils.rnn import pad_sequence
 import json
 
 
+MAX_HISTORY = 100
 NUM_HISTORY = 3
 CANNOTANSWER = "CANNOTANSWER"
 
@@ -72,7 +73,7 @@ class ModelDataset(Dataset):
 
 
 class HAEDataset(Dataset):
-    def __init__(self, input_file, tokenizer, max_seq_len, window_stride):
+    def __init__(self, input_file, tokenizer, max_seq_len, window_stride, picky=False):
         self.inputs = []
         self.start_pos = []
         self.end_pos = []
@@ -85,21 +86,33 @@ class HAEDataset(Dataset):
                 data = data['paragraphs'][0]
                 assert(tokenizer.tokenize(data['context'])[-1] == CANNOTANSWER)
                 context = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(data['context'])[:-1])
+                if picky and len(context) > max_seq_len * 2:
+                    continue
                 no_answer = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(CANNOTANSWER))
                 for index, qas in enumerate(data['qas']):
                     ################## Question ##################
                     q = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(qas['question']))
 
                     ################## History ##################
-                    history = data["qas"][max(0, index - NUM_HISTORY): index]
+                    history_turns = data["qas"][max(0, index - NUM_HISTORY): index]
                     history_txt = []
-                    for turn in history:
+                    for turn in history_turns:
                         history_txt.append(turn["question"])
                         history_txt.append(turn["orig_answer"]["text"])
-                    history = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(" ".join(history_txt)))
+                    entire_history = tokenizer.encode(" ".join(history_txt))
+                    if picky and len(entire_history) > MAX_HISTORY * 1.5:
+                        continue
+                    if len(entire_history) <= MAX_HISTORY:
+                        all_history = [entire_history]
+                    else:
+                        all_history = list()
+                        hist_stride = MAX_HISTORY // 3
+                        for start in range(0, len(entire_history) - MAX_HISTORY + hist_stride, hist_stride):
+                            all_history.append(entire_history[start: min(start + MAX_HISTORY, len(entire_history))])
+                    assert(len(all_history) <= 3)
 
                     ################## Context Sliding Window ##################
-                    context_span_len = max_seq_len - len(q) - len(no_answer) - len(history) - 3
+                    context_span_len = max_seq_len - len(q) - len(no_answer) - MAX_HISTORY - 3
 
                     start_offset = 0
                     while True:
@@ -109,28 +122,30 @@ class HAEDataset(Dataset):
 
                         context_span = context[start_offset:start_offset+chunk_size]
 
-                        cur_input = [tokenizer.bos_token_id] + q + [tokenizer.sep_token_id] + history + context_span + no_answer + [tokenizer.eos_token_id]
-                        segment_ids = [1] * (len(q) + 2) + [0] * (len(history) + len(context_span) + len(no_answer)) + [1]
-                        history_mask = [0] * (len(q) + 2) + [1] * len(history) + [0] * (len(context_span) + len(no_answer)+ 1)
-                        assert(len(cur_input) == len(segment_ids) == len(history_mask))
+                        for history in all_history:
+                            cur_input = [tokenizer.bos_token_id] + q + [tokenizer.sep_token_id] + history + context_span + no_answer + [tokenizer.eos_token_id]
+                            segment_ids = [1] * (len(q) + 2 + len(history)) + [0] * (len(context_span) + len(no_answer)) + [1]
+                            history_mask = [0] * (len(q) + 2) + [1] * len(history) + [0] * (len(context_span) + len(no_answer)+ 1)
+                            assert(len(cur_input) == len(segment_ids) == len(history_mask))
 
-                        self.inputs.append(torch.tensor(cur_input))
-                        self.token_type.append(torch.tensor(segment_ids))
-                        self.history_masks.append(torch.tensor(history_mask))
+                            self.inputs.append(torch.tensor(cur_input))
+                            self.token_type.append(torch.tensor(segment_ids))
+                            self.history_masks.append(torch.tensor(history_mask))
 
-                        answer_start = qas['orig_answer']['answer_start']
-                        answer_start = len(tokenizer.tokenize(data['context'][0:answer_start])) - start_offset
-                        answer_len = len(tokenizer.tokenize(qas['orig_answer']['text']))
-                        answer_end = answer_start + answer_len
+                            answer_start = qas['orig_answer']['answer_start']
+                            answer_start = len(tokenizer.tokenize(data['context'][0:answer_start])) - start_offset
+                            answer_len = len(tokenizer.tokenize(qas['orig_answer']['text']))
+                            answer_end = answer_start + answer_len
 
-                        context_offset = 1 + len(q) + 1 + len(history)
-                        self.context_offsets.append(torch.tensor(context_offset))
-                        if 0 <= answer_start < answer_end < len(context_span):
-                            self.start_pos.append(torch.tensor(answer_start + context_offset))
-                            self.end_pos.append(torch.tensor(answer_end + context_offset))
-                        else:
-                            self.start_pos.append(torch.tensor(len(context_span) + context_offset))
-                            self.end_pos.append(torch.tensor(len(context_span) + len(no_answer) + context_offset))
+                            context_offset = 1 + len(q) + 1 + len(history)
+                            self.context_offsets.append(torch.tensor(context_offset))
+                            if 0 <= answer_start < answer_end < len(context_span):
+                                self.start_pos.append(torch.tensor(answer_start + context_offset))
+                                self.end_pos.append(torch.tensor(answer_end + context_offset))
+                            else:
+                                self.start_pos.append(torch.tensor(len(context_span) + context_offset))
+                                self.end_pos.append(torch.tensor(len(context_span) + len(no_answer) + context_offset))
+
                         if start_offset + chunk_size >= len(context):
                             break
                         start_offset += window_stride
@@ -164,10 +179,10 @@ def load_dataset(fn, tokenizer, batch_size, max_seq_len, window_stride):
     return train_loader, test_loader
 
 def load_hae_dataset(fn, tokenizer, batch_size, max_seq_len, window_stride):
-    train_data = HAEDataset(fn[0], tokenizer, max_seq_len, window_stride)
+    train_data = HAEDataset(fn[0], tokenizer, max_seq_len, window_stride, picky=True)
     test_data = HAEDataset(fn[1], tokenizer, max_seq_len, window_stride)
 
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
+    test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=True)
 
     return train_loader, test_loader
